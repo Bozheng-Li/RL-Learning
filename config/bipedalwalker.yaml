@@ -1,0 +1,174 @@
+# BipedalWalker-v3: continuous robot locomotion.
+experiment:
+  name: bipedalwalker_baseline
+  seed: 42
+
+environment:
+  id: BipedalWalker-v3
+  kwargs:
+    hardcore: false
+  max_episode_steps: 1600
+  attributes: {}
+  monitor:
+    allow_early_resets: true
+    info_keywords: []
+    reset_keywords: []
+
+algorithm:
+  name: PPO
+  device: cpu
+  verbose: 1
+  profiles:
+    PPO:
+      policy: MlpPolicy
+      policy_kwargs:
+        net_arch: [256, 256]
+        activation_fn: tanh
+      kwargs:
+        learning_rate: 0.00025
+        n_steps: 2048
+        batch_size: 64
+        n_epochs: 10
+        gamma: 0.99
+        gae_lambda: 0.95
+        clip_range: 0.2
+        ent_coef: 0.0
+        vf_coef: 0.5
+        max_grad_norm: 0.5
+    A2C:
+      policy: MlpPolicy
+      policy_kwargs:
+        net_arch: [256, 256]
+        activation_fn: tanh
+      kwargs:
+        learning_rate: 0.0007
+        n_steps: 5
+        gamma: 0.99
+        gae_lambda: 1.0
+        ent_coef: 0.0
+        vf_coef: 0.5
+        max_grad_norm: 0.5
+    SAC:
+      policy: MlpPolicy
+      policy_kwargs:
+        net_arch: [256, 256]
+        activation_fn: relu
+      kwargs:
+        learning_rate: 0.0003
+        buffer_size: 1000000
+        learning_starts: 10000
+        batch_size: 256
+        tau: 0.005
+        gamma: 0.99
+        train_freq: 1
+        gradient_steps: 1
+        ent_coef: auto
+    TD3:
+      policy: MlpPolicy
+      policy_kwargs:
+        net_arch: [256, 256]
+        activation_fn: relu
+      kwargs:
+        learning_rate: 0.001
+        buffer_size: 1000000
+        learning_starts: 10000
+        batch_size: 256
+        tau: 0.005
+        gamma: 0.99
+        train_freq: 1
+        gradient_steps: 1
+        policy_delay: 2
+        target_policy_noise: 0.2
+        target_noise_clip: 0.5
+        action_noise:
+          type: normal
+          mean: 0.0
+          sigma: 0.1
+
+training:
+  # 周期性记录动作分布与策略统计（排查策略坍缩用的关键证据）
+  diagnostics:
+    enabled: true
+    interval: 10000
+  total_timesteps: 300000
+  log_interval: 1
+  progress_bar: false
+  reset_num_timesteps: true
+  checkpoint:
+    enabled: true
+    save_freq: 50000
+    directory: checkpoints
+    name_prefix: bipedalwalker
+
+evaluation:
+  enabled: true
+  eval_freq: 25000
+  n_eval_episodes: 5
+  final_episodes: 10
+  deterministic: true
+  seed_offset: 10000
+
+output:
+  directory: outputs/bipedalwalker
+  timestamped: false
+  model_name: final_model
+  logger_formats: [stdout, csv]
+  save_resolved_config: true
+
+visualization:
+  training:
+    enabled: true
+    output_subdirectory: visualizations
+    filename: training_results.png
+    smoothing_window: 20
+    dpi: 150
+  trajectory:
+    enabled: true
+    generate_after_training: true
+    model: final
+    output_subdirectory: trajectories
+    episodes: 2
+    deterministic: true
+    seed_offset: 20000
+    max_steps: 1600
+    record_video: true
+    video_format: mp4
+    fps: 50
+    macro_block_size: 8
+    show_window: false
+    save_plot: true
+    save_data: true
+    save_raw_observations: false
+    observation_mode: vector
+    dpi: 150
+    observation_labels:
+      - hull_angle
+      - hull_angular_velocity
+      - hull_x_velocity
+      - hull_y_velocity
+      - hip_1_joint_angle
+      - hip_1_joint_speed
+      - knee_1_joint_angle
+      - knee_1_joint_speed
+      - leg_1_ground_contact
+      - hip_2_joint_angle
+      - hip_2_joint_speed
+      - knee_2_joint_angle
+      - knee_2_joint_speed
+      - leg_2_ground_contact
+      - lidar_0
+      - lidar_1
+      - lidar_2
+      - lidar_3
+      - lidar_4
+      - lidar_5
+      - lidar_6
+      - lidar_7
+      - lidar_8
+      - lidar_9
+    phase_plots:
+      - x: 0
+        y: 2
+        title: body_motion_phase_space
+        xlabel: hull_angle
+        ylabel: hull_x_velocity

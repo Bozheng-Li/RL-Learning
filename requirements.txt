@@ -1,0 +1,11 @@
+gymnasium[classic-control,box2d,atari]>=1.0,<2.0
+stable-baselines3>=2.9,<3.0
+sb3-contrib>=2.9,<3.0
+minigrid>=2.3,<3.0
+PyYAML>=6.0,<7.0
+matplotlib>=3.10,<4.0
+imageio>=2.34,<3.0
+imageio-ffmpeg>=0.5,<1.0
+tqdm>=4.66,<5.0
+rich>=13.7,<15.0
+tensorboard>=2.16,<3.0

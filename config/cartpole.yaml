@@ -1,0 +1,164 @@
+# CartPole-v1: all paths are relative to the repository root.
+experiment:
+  name: cartpole_baseline
+  seed: 42
+
+environment:
+  id: CartPole-v1
+  # Arguments passed directly to gymnasium.make().
+  kwargs:
+    sutton_barto_reward: false
+  max_episode_steps: 500
+  # Low-level CartPole attributes applied after construction.
+  attributes:
+    gravity: 9.8
+    masscart: 1.0
+    masspole: 0.1
+    length: 0.5
+    force_mag: 10.0
+    tau: 0.02
+    theta_threshold_radians: 0.20943951023931953
+    x_threshold: 2.4
+    kinematics_integrator: euler
+  monitor:
+    allow_early_resets: true
+    info_keywords: []
+    reset_keywords: []
+
+algorithm:
+  # Change this to PPO, A2C, or DQN. The matching profile below is selected.
+  name: PPO
+  device: cpu
+  verbose: 1
+  profiles:
+    PPO:
+      policy: MlpPolicy
+      policy_kwargs:
+        net_arch: [64, 64]
+        activation_fn: tanh
+        ortho_init: true
+      kwargs:
+        learning_rate: 0.0003
+        n_steps: 256
+        batch_size: 64
+        n_epochs: 10
+        gamma: 0.99
+        gae_lambda: 0.95
+        clip_range: 0.2
+        normalize_advantage: true
+        ent_coef: 0.0
+        vf_coef: 0.5
+        max_grad_norm: 0.5
+        use_sde: false
+        sde_sample_freq: -1
+        target_kl: null
+    A2C:
+      policy: MlpPolicy
+      policy_kwargs:
+        net_arch: [64, 64]
+        activation_fn: tanh
+        ortho_init: true
+      kwargs:
+        learning_rate: 0.0007
+        n_steps: 5
+        gamma: 0.99
+        gae_lambda: 1.0
+        ent_coef: 0.0
+        vf_coef: 0.5
+        max_grad_norm: 0.5
+        rms_prop_eps: 0.00001
+        use_rms_prop: true
+        normalize_advantage: false
+    DQN:
+      policy: MlpPolicy
+      policy_kwargs:
+        net_arch: [64, 64]
+        activation_fn: relu
+      kwargs:
+        learning_rate: 0.0001
+        buffer_size: 100000
+        learning_starts: 1000
+        batch_size: 64
+        tau: 1.0
+        gamma: 0.99
+        train_freq: 4
+        gradient_steps: 1
+        target_update_interval: 1000
+        exploration_fraction: 0.1
+        exploration_initial_eps: 1.0
+        exploration_final_eps: 0.05
+        max_grad_norm: 10.0
+
+training:
+  # 周期性记录动作分布与策略统计（排查策略坍缩用的关键证据）
+  diagnostics:
+    enabled: true
+    interval: 10000
+  total_timesteps: 50000
+  log_interval: 1
+  progress_bar: false
+  reset_num_timesteps: true
+  checkpoint:
+    enabled: true
+    save_freq: 10000
+    directory: checkpoints
+    name_prefix: cartpole
+    save_replay_buffer: false
+    save_vecnormalize: false
+
+evaluation:
+  enabled: true
+  eval_freq: 5000
+  n_eval_episodes: 5
+  final_episodes: 10
+  deterministic: true
+  seed_offset: 10000
+
+output:
+  directory: outputs/cartpole
+  timestamped: false
+  model_name: final_model
+  # Available formats include stdout, csv, log, json, and tensorboard.
+  logger_formats: [stdout, csv]
+  save_resolved_config: true
+
+visualization:
+  training:
+    enabled: true
+    output_subdirectory: visualizations
+    filename: training_results.png
+    smoothing_window: 20
+    dpi: 150
+  trajectory:
+    enabled: true
+    generate_after_training: true
+    model: final
+    output_subdirectory: trajectories
+    episodes: 3
+    deterministic: true
+    seed_offset: 20000
+    max_steps: null
+    record_video: true
+    video_format: mp4
+    fps: 50
+    macro_block_size: 8
+    show_window: false
+    save_plot: true
+    save_data: true
+    dpi: 150
+    observation_labels:
+      - cart_position
+      - cart_velocity
+      - pole_angle_rad
+      - pole_angular_velocity
+    phase_plots:
+      - x: 0
+        y: 1
+        title: cart_phase_space
+        xlabel: cart_position
+        ylabel: cart_velocity
+      - x: 2
+        y: 3
+        title: pole_phase_space
+        xlabel: pole_angle_rad
+        ylabel: pole_angular_velocity

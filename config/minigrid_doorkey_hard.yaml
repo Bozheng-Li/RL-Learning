@@ -1,0 +1,140 @@
+# MiniGrid DoorKey-6x6 with progress shaping: hard exploration, solved.
+#
+# This is the next step up from minigrid_doorkey.yaml. DoorKey-6x6 is large enough
+# that the key routinely falls outside the 7x7 field of view, and at this size an
+# unshaped agent does not solve it at all: 160k steps stay at zero reward, and a
+# count-based novelty bonus (see `minigrid_novelty`) fails too -- the agent spends
+# the entire novelty budget exploring and still never unlocks the door.
+#
+# Diagnosis of why: a random policy already acquires the key in 93% of episodes,
+# but opens the door in only 14%. The bottleneck is not finding things, it is that
+# `pickup` and `toggle` pay off tens of steps later, so nothing connects them to
+# the final reward. State novelty cannot fix that -- it rewards occupying new
+# (position, direction) pairs, not pressing the right action once you are there.
+#
+# The fix is `minigrid_progress`, which pays a small bonus for the two
+# irreversible milestones. Both lie on every successful trajectory, so the shaping
+# does not change what the optimal policy is. With it, this config reaches ~95-100%
+# success within about 20k steps.
+#
+# Note the bonuses are training-only. The wrappers disable themselves for
+# evaluation and trajectory recording, so every reported return and the recorded
+# videos show unshaped task reward.
+experiment:
+  name: minigrid_doorkey_hard
+  seed: 42
+  # Small policies run ~2x faster on a single torch thread; see _apply_torch_threads.
+  torch_threads: 1
+
+environment:
+  id: MiniGrid-DoorKey-6x6-v0
+  kwargs: {}
+  # null keeps the environment default (10 * size^2 = 360 steps for 6x6).
+  max_episode_steps: null
+  wrappers: [minigrid_progress, minigrid_flat]
+  shaping_pickup_bonus: 0.5
+  shaping_door_bonus: 0.5
+  attributes: {}
+  monitor:
+    allow_early_resets: true
+    info_keywords: []
+    reset_keywords: []
+
+algorithm:
+  name: PPO
+  device: cpu
+  verbose: 1
+  profiles:
+    PPO:
+      policy: MlpPolicy
+      policy_kwargs:
+        net_arch: [128, 128]
+        activation_fn: relu
+      kwargs:
+        learning_rate: 0.0003
+        n_steps: 256
+        batch_size: 64
+        n_epochs: 10
+        gamma: 0.99
+        gae_lambda: 0.95
+        clip_range: 0.2
+        ent_coef: 0.01
+        vf_coef: 0.5
+        max_grad_norm: 0.5
+    RecurrentPPO:
+      policy: MlpLstmPolicy
+      policy_kwargs:
+        net_arch: [128, 128]
+        lstm_hidden_size: 128
+        n_lstm_layers: 1
+        activation_fn: relu
+      kwargs:
+        learning_rate: 0.0003
+        n_steps: 256
+        batch_size: 64
+        n_epochs: 4
+        gamma: 0.99
+        gae_lambda: 0.95
+        clip_range: 0.2
+        ent_coef: 0.01
+        vf_coef: 0.5
+        max_grad_norm: 0.5
+
+training:
+  # 周期性记录动作分布与策略统计（排查策略坍缩用的关键证据）
+  diagnostics:
+    enabled: true
+    interval: 10000
+  total_timesteps: 200000
+  log_interval: 1
+  progress_bar: false
+  reset_num_timesteps: true
+  checkpoint:
+    enabled: true
+    save_freq: 50000
+    directory: checkpoints
+    name_prefix: doorkey_hard
+
+evaluation:
+  enabled: true
+  eval_freq: 10000
+  n_eval_episodes: 20
+  final_episodes: 25
+  deterministic: true
+  seed_offset: 10000
+
+output:
+  directory: outputs/minigrid_doorkey_hard
+  timestamped: false
+  model_name: final_model
+  logger_formats: [stdout, csv]
+  save_resolved_config: true
+
+visualization:
+  training:
+    enabled: true
+    output_subdirectory: visualizations
+    filename: training_results.png
+    smoothing_window: 20
+    dpi: 150
+  trajectory:
+    enabled: true
+    generate_after_training: true
+    model: final
+    output_subdirectory: trajectories
+    episodes: 3
+    deterministic: true
+    seed_offset: 20000
+    max_steps: 360
+    record_video: true
+    video_format: mp4
+    fps: 10
+    macro_block_size: 8
+    show_window: false
+    save_plot: true
+    save_data: true
+    save_raw_observations: false
+    observation_mode: summary
+    dpi: 150
+    observation_labels: [observation_mean, observation_std, observation_min, observation_max]
+    phase_plots: []

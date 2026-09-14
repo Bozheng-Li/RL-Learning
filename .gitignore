@@ -1,0 +1,20 @@
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# Python 产物
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# 训练产物：模型 + checkpoint + 视频，累计可能到 GB 级，不入库。
+# README 需要的配图另行挑选，放在 docs/images/ 下（体积受控）。
+outputs/
+
+# 编辑器与系统文件
+.vscode/
+.idea/
+.DS_Store

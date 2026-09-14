@@ -1,0 +1,151 @@
+# Pendulum-v1: continuous control with a bounded torque action.
+experiment:
+  name: pendulum_baseline
+  seed: 42
+
+environment:
+  id: Pendulum-v1
+  kwargs:
+    g: 10.0
+    max_episode_steps: 200
+  max_episode_steps: 200
+  attributes: {}
+  monitor:
+    allow_early_resets: true
+    info_keywords: []
+    reset_keywords: []
+
+algorithm:
+  name: PPO
+  device: cpu
+  verbose: 1
+  profiles:
+    PPO:
+      policy: MlpPolicy
+      policy_kwargs:
+        net_arch: [64, 64]
+        activation_fn: tanh
+      kwargs:
+        learning_rate: 0.0003
+        n_steps: 2048
+        batch_size: 64
+        n_epochs: 10
+        gamma: 0.99
+        gae_lambda: 0.95
+        clip_range: 0.2
+        ent_coef: 0.0
+        vf_coef: 0.5
+        max_grad_norm: 0.5
+    A2C:
+      policy: MlpPolicy
+      policy_kwargs:
+        net_arch: [64, 64]
+        activation_fn: tanh
+      kwargs:
+        learning_rate: 0.0007
+        n_steps: 5
+        gamma: 0.99
+        gae_lambda: 1.0
+        ent_coef: 0.0
+        vf_coef: 0.5
+        max_grad_norm: 0.5
+    SAC:
+      policy: MlpPolicy
+      policy_kwargs:
+        net_arch: [256, 256]
+        activation_fn: relu
+      kwargs:
+        learning_rate: 0.0003
+        buffer_size: 100000
+        learning_starts: 1000
+        batch_size: 256
+        tau: 0.005
+        gamma: 0.99
+        train_freq: 1
+        gradient_steps: 1
+        ent_coef: auto
+    TD3:
+      policy: MlpPolicy
+      policy_kwargs:
+        net_arch: [256, 256]
+        activation_fn: relu
+      kwargs:
+        learning_rate: 0.001
+        buffer_size: 100000
+        learning_starts: 1000
+        batch_size: 256
+        tau: 0.005
+        gamma: 0.99
+        train_freq: 1
+        gradient_steps: 1
+        policy_delay: 2
+        target_policy_noise: 0.2
+        target_noise_clip: 0.5
+        action_noise:
+          type: normal
+          mean: 0.0
+          sigma: 0.1
+
+training:
+  # 周期性记录动作分布与策略统计（排查策略坍缩用的关键证据）
+  diagnostics:
+    enabled: true
+    interval: 10000
+  total_timesteps: 50000
+  log_interval: 1
+  progress_bar: false
+  reset_num_timesteps: true
+  checkpoint:
+    enabled: true
+    save_freq: 10000
+    directory: checkpoints
+    name_prefix: pendulum
+
+evaluation:
+  enabled: true
+  eval_freq: 5000
+  n_eval_episodes: 5
+  final_episodes: 10
+  deterministic: true
+  seed_offset: 10000
+
+output:
+  directory: outputs/pendulum
+  timestamped: false
+  model_name: final_model
+  logger_formats: [stdout, csv]
+  save_resolved_config: true
+
+visualization:
+  training:
+    enabled: true
+    output_subdirectory: visualizations
+    filename: training_results.png
+    smoothing_window: 20
+    dpi: 150
+  trajectory:
+    enabled: true
+    generate_after_training: true
+    model: final
+    output_subdirectory: trajectories
+    episodes: 3
+    deterministic: true
+    seed_offset: 20000
+    max_steps: null
+    record_video: true
+    video_format: mp4
+    fps: 30
+    macro_block_size: 8
+    show_window: false
+    save_plot: true
+    save_data: true
+    save_raw_observations: false
+    observation_mode: vector
+    dpi: 150
+    observation_labels: [sin_theta, cos_theta, angular_velocity]
+    phase_plots:
+      - x: 0
+        y: 2
+        title: angle_velocity_phase_space
+        xlabel: sin_theta
+        ylabel: angular_velocity

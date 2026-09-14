@@ -1,0 +1,203 @@
+# LunarLander-v3: all paths are relative to the repository root.
+experiment:
+  name: lunarlander_baseline
+  seed: 42
+
+environment:
+  id: LunarLander-v3
+  # Arguments passed directly to gymnasium.make().
+  kwargs:
+    continuous: false
+    gravity: -10.0
+    enable_wind: false
+    wind_power: 15.0
+    turbulence_power: 1.5
+  max_episode_steps: 1000
+  # Optional low-level attributes can be added here when the environment exposes them.
+  attributes: {}
+  monitor:
+    allow_early_resets: true
+    info_keywords: []
+    reset_keywords: []
+
+algorithm:
+  # Discrete mode: PPO, A2C, DQN. Continuous mode: PPO, A2C, SAC, TD3.
+  # SAC/TD3 require environment.kwargs.continuous: true.
+  name: PPO
+  device: cpu
+  verbose: 1
+  profiles:
+    PPO:
+      policy: MlpPolicy
+      policy_kwargs:
+        net_arch: [128, 128]
+        activation_fn: tanh
+        ortho_init: true
+      kwargs:
+        learning_rate: 0.0003
+        n_steps: 1024
+        batch_size: 64
+        n_epochs: 10
+        gamma: 0.99
+        gae_lambda: 0.95
+        clip_range: 0.2
+        normalize_advantage: true
+        ent_coef: 0.01
+        vf_coef: 0.5
+        max_grad_norm: 0.5
+        use_sde: false
+        sde_sample_freq: -1
+        target_kl: null
+    A2C:
+      policy: MlpPolicy
+      policy_kwargs:
+        net_arch: [128, 128]
+        activation_fn: tanh
+        ortho_init: true
+      kwargs:
+        learning_rate: 0.0007
+        n_steps: 5
+        gamma: 0.99
+        gae_lambda: 1.0
+        ent_coef: 0.01
+        vf_coef: 0.5
+        max_grad_norm: 0.5
+        rms_prop_eps: 0.00001
+        use_rms_prop: true
+        normalize_advantage: false
+    DQN:
+      policy: MlpPolicy
+      policy_kwargs:
+        net_arch: [128, 128]
+        activation_fn: relu
+      kwargs:
+        learning_rate: 0.0001
+        buffer_size: 100000
+        learning_starts: 1000
+        batch_size: 64
+        tau: 1.0
+        gamma: 0.99
+        train_freq: 4
+        gradient_steps: 1
+        target_update_interval: 1000
+        exploration_fraction: 0.2
+        exploration_initial_eps: 1.0
+        exploration_final_eps: 0.05
+        max_grad_norm: 10.0
+    SAC:
+      policy: MlpPolicy
+      policy_kwargs:
+        net_arch: [256, 256]
+        activation_fn: relu
+      kwargs:
+        learning_rate: 0.0003
+        buffer_size: 1000000
+        learning_starts: 1000
+        batch_size: 256
+        tau: 0.005
+        gamma: 0.99
+        train_freq: 1
+        gradient_steps: 1
+        ent_coef: auto
+        target_update_interval: 1
+        use_sde: false
+        sde_sample_freq: -1
+    TD3:
+      policy: MlpPolicy
+      policy_kwargs:
+        net_arch: [256, 256]
+        activation_fn: relu
+      kwargs:
+        learning_rate: 0.001
+        buffer_size: 1000000
+        learning_starts: 1000
+        batch_size: 256
+        tau: 0.005
+        gamma: 0.99
+        train_freq: 1
+        gradient_steps: 1
+        policy_delay: 2
+        target_policy_noise: 0.2
+        target_noise_clip: 0.5
+        action_noise:
+          type: normal
+          mean: 0.0
+          sigma: 0.1
+
+training:
+  # 周期性记录动作分布与策略统计（排查策略坍缩用的关键证据）
+  diagnostics:
+    enabled: true
+    interval: 10000
+  total_timesteps: 200000
+  log_interval: 1
+  progress_bar: false
+  reset_num_timesteps: true
+  checkpoint:
+    enabled: true
+    save_freq: 25000
+    directory: checkpoints
+    name_prefix: lunarlander
+    save_replay_buffer: false
+    save_vecnormalize: false
+
+evaluation:
+  enabled: true
+  eval_freq: 10000
+  n_eval_episodes: 5
+  final_episodes: 10
+  deterministic: true
+  seed_offset: 10000
+
+output:
+  directory: outputs/lunarlander
+  timestamped: false
+  model_name: final_model
+  # Available formats include stdout, csv, log, json, and tensorboard.
+  logger_formats: [stdout, csv]
+  save_resolved_config: true
+
+visualization:
+  training:
+    enabled: true
+    output_subdirectory: visualizations
+    filename: training_results.png
+    smoothing_window: 20
+    dpi: 150
+  trajectory:
+    enabled: true
+    generate_after_training: true
+    model: final
+    output_subdirectory: trajectories
+    episodes: 3
+    deterministic: true
+    seed_offset: 20000
+    max_steps: null
+    record_video: true
+    video_format: mp4
+    fps: 30
+    macro_block_size: 8
+    show_window: false
+    save_plot: true
+    save_data: true
+    dpi: 150
+    observation_labels:
+      - x_position
+      - y_position
+      - x_velocity
+      - y_velocity
+      - angle_rad
+      - angular_velocity
+      - left_leg_contact
+      - right_leg_contact
+    phase_plots:
+      - x: 0
+        y: 1
+        title: lander_xy_path
+        xlabel: x_position
+        ylabel: y_position
+      - x: 4
+        y: 5
+        title: attitude_phase_space
+        xlabel: angle_rad
+        ylabel: angular_velocity

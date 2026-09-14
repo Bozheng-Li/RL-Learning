@@ -1,0 +1,120 @@
+# CarRacing-v3: image-based continuous driving.
+experiment:
+  name: car_racing_baseline
+  seed: 42
+
+environment:
+  id: CarRacing-v3
+  kwargs:
+    continuous: true
+    domain_randomize: false
+    lap_complete_percent: 0.95
+  max_episode_steps: 1000
+  attributes: {}
+  monitor:
+    allow_early_resets: true
+    info_keywords: []
+    reset_keywords: []
+
+algorithm:
+  name: PPO
+  device: cpu
+  verbose: 1
+  profiles:
+    PPO:
+      policy: CnnPolicy
+      policy_kwargs:
+        net_arch: [256, 256]
+        activation_fn: relu
+      kwargs:
+        learning_rate: 0.00025
+        n_steps: 2048
+        batch_size: 64
+        n_epochs: 10
+        gamma: 0.99
+        gae_lambda: 0.95
+        clip_range: 0.2
+        ent_coef: 0.0
+        vf_coef: 0.5
+        max_grad_norm: 0.5
+    SAC:
+      policy: CnnPolicy
+      policy_kwargs:
+        net_arch: [256, 256]
+        activation_fn: relu
+      kwargs:
+        learning_rate: 0.0003
+        buffer_size: 100000
+        learning_starts: 1000
+        batch_size: 64
+        tau: 0.005
+        gamma: 0.99
+        train_freq: 1
+        gradient_steps: 1
+        ent_coef: auto
+
+training:
+  # 周期性记录动作分布与策略统计（排查策略坍缩用的关键证据）
+  diagnostics:
+    enabled: true
+    interval: 10000
+  total_timesteps: 200000
+  log_interval: 1
+  progress_bar: false
+  reset_num_timesteps: true
+  checkpoint:
+    enabled: true
+    save_freq: 50000
+    directory: checkpoints
+    name_prefix: car_racing
+
+evaluation:
+  enabled: true
+  eval_freq: 25000
+  n_eval_episodes: 3
+  final_episodes: 5
+  deterministic: true
+  seed_offset: 10000
+
+output:
+  directory: outputs/car_racing
+  timestamped: false
+  model_name: final_model
+  logger_formats: [stdout, csv]
+  save_resolved_config: true
+
+visualization:
+  training:
+    enabled: true
+    output_subdirectory: visualizations
+    filename: training_results.png
+    smoothing_window: 20
+    dpi: 150
+  trajectory:
+    enabled: true
+    generate_after_training: true
+    model: final
+    output_subdirectory: trajectories
+    episodes: 1
+    deterministic: true
+    seed_offset: 20000
+    max_steps: 1000
+    record_video: true
+    video_format: mp4
+    fps: 50
+    macro_block_size: 8
+    show_window: false
+    save_plot: true
+    save_data: true
+    save_raw_observations: false
+    observation_mode: summary
+    dpi: 150
+    observation_labels:
+      - pixel_mean
+      - pixel_std
+      - pixel_min
+      - pixel_max
+      - red_mean
+      - green_mean
+      - blue_mean
+    phase_plots: []
