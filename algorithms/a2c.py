@@ -195,7 +195,10 @@ class A2C(OnPolicyAlgorithm):
             "train/entropy_loss": float(-entropy.item()),
             "train/explained_variance": explained_variance,
             "train/learning_rate": self.learning_rate,
-            "rollout/ep_rew_mean": float(returns.mean().item()),
+            # 回合回报取自基类的 ep_info_buffer。这里曾经写的是
+            # `returns.mean()`——那是**折扣回报**的均值（critic 的 target），
+            # 不是回合总回报，两者在 CartPole 上能差一个数量级。
+            **self._episode_logs(),
         }
 
     def _actions_to_tensor(self, actions: np.ndarray) -> torch.Tensor:

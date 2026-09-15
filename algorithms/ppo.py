@@ -40,7 +40,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
 import torch
 
 from . import register
@@ -162,7 +161,8 @@ class PPO(A2C):
             return {}
         logs = {f"train/{key}": value / updates for key, value in totals.items()}
         logs["train/learning_rate"] = self.learning_rate
-        logs["rollout/ep_rew_mean"] = float(
-            self.buffer.get("rewards").mean() if self.buffer.pos else 0.0
-        )
+        # 回合回报取自基类的 ep_info_buffer。这里曾经写的是
+        # `self.buffer.get("rewards").mean()`——那是**每步奖励**的均值，
+        # 对 CartPole 会报 1.0 而真实回合回报是 500，差了整整一个回合长度。
+        logs.update(self._episode_logs())
         return logs

@@ -164,7 +164,10 @@ class REINFORCE(OnPolicyAlgorithm):
         return {
             "train/policy_gradient_loss": float(policy_loss.item()),
             "train/entropy_loss": float(entropy.item()),
-            "rollout/ep_rew_mean": float(np.mean(returns)),
+            # 回合回报取自基类的 ep_info_buffer。这里曾经写的是
+            # `np.mean(returns)`——那是**return-to-go**（每步的折扣累计回报），
+            # 不是回合总回报，前者的均值会被折扣因子系统性压低。
+            **self._episode_logs(),
         }
 
     def _actions_to_tensor(self, actions: list[Any]) -> torch.Tensor:

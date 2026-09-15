@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -96,6 +97,13 @@ class OnPolicyAlgorithm(BaseAlgorithm):
 
         self._last_observation: np.ndarray | None = None
 
+        #: 最近若干个**完整回合**的 (总回报, 回合长度)，语义与 SB3 的
+        #: ``ep_info_buffer`` 完全一致。``progress.csv`` 里的 ``rollout/ep_rew_mean``
+        #: 必须取自这里——它指的是「回合回报均值」，而不是每步奖励或折扣回报。
+        self.ep_info_buffer: deque[tuple[float, int]] = deque(maxlen=self._stats_window_size)
+        self._episode_reward = 0.0
+        self._episode_length = 0
+
     # ---- 子类需要实现的部分 ----
 
     @abstractmethod
@@ -118,6 +126,10 @@ class OnPolicyAlgorithm(BaseAlgorithm):
     require_profile: bool = True
     #: 允许缺失时使用的兜底超参。
     default_profile: dict[str, Any] = {}
+
+    #: 回合统计的滑动窗口长度，与 SB3 的 ``_stats_window_size`` 同值。取 100 而不是
+    #: 全部历史，是为了让曲线反映**近期**水平——否则训练早期的高方差会一直拖住均值。
+    _stats_window_size: int = 100
 
     def _resolve_profile(self, algorithm_config: dict[str, Any]) -> dict[str, Any]:
         """读取本算法的 profile。
@@ -183,13 +195,41 @@ class OnPolicyAlgorithm(BaseAlgorithm):
 
         Gymnasium 在回合结束后要求显式 ``reset()``，这里统一处理，让上层逻辑
         只需要关心「拿到下一个观测、奖励、是否结束」。
+
+        三个算法（REINFORCE / A2C / PPO）的环境交互都汇聚到这里，所以回合统计
+        也在这里做——这是唯一知道「这一步是不是本回合最后一步」的地方。
         """
         observation, reward, terminated, truncated, info = self.env.step(action)
         done = terminated or truncated
+
+        self._episode_reward += float(reward)
+        self._episode_length += 1
+        if done:
+            # 回合结束才记一笔：``ep_rew_mean`` 要的是回合总回报，不是单步奖励。
+            self.ep_info_buffer.append((self._episode_reward, self._episode_length))
+            self._episode_reward = 0.0
+            self._episode_length = 0
+
         if done:
             observation, _ = self.env.reset()
         self._last_observation = np.asarray(observation, dtype=np.float32)
         return self._last_observation, float(reward), done, info
+
+    def _episode_logs(self) -> dict[str, float]:
+        """回合级统计，用于 ``progress.csv``。
+
+        缓冲为空时返回**空字典**而不是 0.0 —— 与 SB3 一致（它在
+        ``len(ep_info_buffer) > 0`` 时才 record）。写 0.0 会让曲线在第一个回合
+        结束前贴着零轴，看起来像训练没启动。
+        """
+        if not self.ep_info_buffer:
+            return {}
+        rewards = np.asarray([reward for reward, _ in self.ep_info_buffer])
+        lengths = np.asarray([length for _, length in self.ep_info_buffer])
+        return {
+            "rollout/ep_rew_mean": float(rewards.mean()),
+            "rollout/ep_len_mean": float(lengths.mean()),
+        }
 
     def _log_env_step(self, callback: Any, locals_: dict[str, Any]) -> bool:
         """通知回调「又走了一步」。
@@ -224,6 +264,10 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         if reset_num_timesteps:
             self.num_timesteps = 0
             self.n_calls = 0
+            # 回合统计也要一起清空，否则「重新训练」会带着上一轮的均值。
+            self.ep_info_buffer.clear()
+        self._episode_reward = 0.0
+        self._episode_length = 0
         self._last_observation = None
         self._stop_training = False
 
