@@ -26,7 +26,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 import streamlit as st  # noqa: E402
 
-from webui import paths  # noqa: E402
+from webui import paths, theme  # noqa: E402
 from webui.views import compare as view_compare  # noqa: E402
 from webui.views import detail as view_detail  # noqa: E402
 from webui.views import monitor as view_monitor  # noqa: E402
@@ -44,6 +44,14 @@ PAGES = {
 #: 侧边栏可选的自动刷新间隔；None 表示关闭定时刷新。
 POLL_OPTIONS: list[float | None] = [None, 1.0, 2.0, 5.0, 10.0, 30.0]
 
+PAGE_HINTS = {
+    "运行总览": "所有实验的状态与结果",
+    "运行详情": "曲线、诊断、轨迹与产物",
+    "跨运行对比": "把多次实验放在一起看",
+    "发起训练": "从配置生成表单，子进程启动",
+    "训练监控": "实时进度、信号与日志",
+}
+
 
 def main() -> None:
     st.set_page_config(
@@ -52,10 +60,17 @@ def main() -> None:
         layout="wide",
         initial_sidebar_state="expanded",
     )
+    theme.inject()
 
     with st.sidebar:
         st.title("Reinforce 实验台")
-        choice = st.radio("页面", list(PAGES), key="page")
+        choice = st.radio(
+            "页面",
+            list(PAGES),
+            key="page",
+            label_visibility="collapsed",
+        )
+        st.caption(PAGE_HINTS.get(choice, ""))
 
         st.divider()
 
@@ -79,6 +94,9 @@ def main() -> None:
 
         if st.button("清空缓存并刷新", width="stretch"):
             st.cache_data.clear()
+            from webui import data  # noqa: PLC0415
+
+            data.clear_caches()
             st.rerun()
 
         st.divider()

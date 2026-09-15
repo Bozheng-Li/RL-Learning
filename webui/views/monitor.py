@@ -13,7 +13,8 @@ from pathlib import Path
 
 import streamlit as st
 
-from webui import data, jobs, live
+from webui import data, jobs, live, theme
+from webui.views import _shared
 
 
 def _session_jobs() -> dict[str, jobs.Job]:
@@ -69,20 +70,18 @@ def _render_progress_block(
         )
         right.metric("预计剩余", live.format_eta(progress.eta_seconds))
 
-        # 只画这个运行真的有的列：DQN 没有 KL，自研算法没有 FPS。
-        frame = live.signal_frame(run_dir)
-        if frame is not None and not frame.empty:
-            preferred = [key for key in ("reward", "eval_reward", "kl", "entropy", "loss")
-                         if key in frame.columns]
-            shown = preferred or list(frame.columns)[:2]
-            st.line_chart(
-                frame[shown].rename(columns={k: live.SIGNAL_LABELS.get(k, k) for k in shown}),
-                height=260,
-            )
+        # 每个信号一张小图、各自缩放。它们的量纲差得极远（回报可能上百、KL 只有
+        # 0.01 量级），叠在一根轴上会把小量纲的曲线压成贴着 x 轴的一条直线。
+        frame = live.read_progress_csv(run_dir / "logs" / "progress.csv")
+        signals = [key for key in live.available_signals(frame) if key != "steps"]
+        preferred = [key for key in ("reward", "kl", "entropy", "clip") if key in signals]
+        selected = preferred[:4] or signals[:2]
+        if selected:
+            _shared.signal_charts(run_dir, selected, height=190)
 
 
 def render() -> None:
-    st.header("训练监控")
+    theme.page_header("训练监控", "由 WebUI 启动的任务，实时刷新")
 
     all_jobs = _all_jobs()
     if not all_jobs:

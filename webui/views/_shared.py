@@ -29,6 +29,43 @@ def load_runs(pattern: str | None = None) -> list[data.RunInfo]:
     return data.list_runs(outputs_root(), pattern=pattern)
 
 
+def signal_charts(
+    run_dir: Path,
+    keys: list[str],
+    *,
+    height: int = 220,
+    columns: int = 2,
+) -> None:
+    """每个信号一张小图，各自独立缩放。
+
+    刻意**不**把多个信号叠在同一根轴上：它们的量纲差得极远（回合回报可能到几百，
+    近似 KL 只有 0.01 量级），画在一起时小量纲的曲线会被压成贴着 x 轴的一条直线，
+    看起来像「没数据」。分工明确的独立缩放才读得出来。
+    """
+    import streamlit as st  # noqa: PLC0415  —— 本模块只在 Streamlit 里用
+
+    from webui import live  # noqa: PLC0415
+
+    frame = live.signal_frame(run_dir, keys=keys)
+    if frame is None or frame.empty:
+        st.info("这些信号还没有数据。")
+        return
+
+    available = [key for key in keys if key in frame.columns]
+    if not available:
+        st.info("这些信号还没有数据。")
+        return
+
+    rows = (len(available) + columns - 1) // columns
+    for index in range(rows):
+        chunks = available[index * columns : (index + 1) * columns]
+        slots = st.columns(len(chunks))
+        for slot, key in zip(slots, chunks):
+            with slot:
+                st.caption(live.SIGNAL_LABELS.get(key, key))
+                st.line_chart(frame[[key]], height=height)
+
+
 def run_selector(
     runs: list[data.RunInfo],
     *,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from webui import data, live
+from webui import data, live, theme
 from webui.views import _shared
 
 
@@ -34,7 +34,7 @@ def _summary_table(runs: list[data.RunInfo]) -> pd.DataFrame:
 
 
 def render() -> None:
-    st.header("运行总览")
+    theme.page_header("运行总览", "所有实验的状态、算法与最终回报")
 
     runs = _shared.load_runs()
     if not runs:
@@ -49,11 +49,15 @@ def render() -> None:
     counts = {status: 0 for status in data.STATUS_LABELS}
     for info in runs:
         counts[info.status] += 1
-    columns = st.columns(4)
-    for column, status in zip(columns, ("completed", "running", "failed", "not_started")):
-        column.metric(data.STATUS_LABELS[status], counts[status])
-
-    st.divider()
+    rewards = [i.summary.get("mean_reward") for i in runs if i.summary.get("mean_reward") is not None]
+    theme.stat_row(
+        [
+            ("运行总数", len(runs), f"{len({i.environment for i in runs if i.environment})} 个环境"),
+            ("已完成", counts["completed"], "有 evaluation.json"),
+            ("进行中", counts["running"], "正在写入日志"),
+            ("失败", counts["failed"], "无结果且日志已停"),
+        ]
+    )
 
     # ---- 筛选 ----
     with st.expander("筛选", expanded=False):
@@ -84,6 +88,7 @@ def render() -> None:
     event = st.dataframe(
         table,
         width="stretch",
+        height=theme.fit_height(len(table)),
         hide_index=True,
         on_select="rerun",
         selection_mode="single-row",
@@ -116,7 +121,7 @@ def render() -> None:
         st.subheader("进行中")
         for info in running:
             progress = live.compute_progress(info.path, info.total_timesteps)
-            left, right = st.columns([3, 1])
+            left, right = st.columns([4, 1], vertical_alignment="center")
             if progress is None:
                 left.progress(0.0, text=f"{info.name}：还没写出任何训练数据")
                 right.metric("预计剩余", "未知")
@@ -128,9 +133,8 @@ def render() -> None:
             )
             right.metric("预计剩余", live.format_eta(progress.eta_seconds))
 
-    # ---- 环境分布小结 ----
     st.divider()
-    st.caption(
-        f"共 {len(filtered)} 个运行；输出根目录：`{_shared.outputs_root()}`。"
+    theme.caption(
+        f"共 {len(filtered)} 个运行；输出根目录 <code>{_shared.outputs_root()}</code>。"
         "跨环境比较回报没有意义——各环境的奖励尺度完全不同。"
     )

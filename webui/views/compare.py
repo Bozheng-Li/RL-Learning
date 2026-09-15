@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from webui import data, plots
+from webui import data, plots, theme
 from webui.views import _shared
 
 
@@ -31,7 +31,7 @@ def _result_table(runs: list[data.RunInfo]) -> pd.DataFrame:
 
 
 def render() -> None:
-    st.header("跨运行对比")
+    theme.page_header("跨运行对比", "把多次实验的曲线叠在一起，结果并排看")
 
     runs = _shared.load_runs()
     completed = [info for info in runs if info.summary]
@@ -68,6 +68,7 @@ def render() -> None:
         table,
         hide_index=True,
         width="stretch",
+        height=theme.fit_height(len(table)),
         column_config={
             "均值回报": st.column_config.NumberColumn(format="%.2f"),
             "标准差": st.column_config.NumberColumn(format="%.2f"),

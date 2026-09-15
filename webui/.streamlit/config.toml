@@ -22,5 +22,13 @@ gatherUsageStats = false
 [client]
 toolbarMode = "minimal"
 
+# 主题。这五个颜色是 Streamlit 原生支持的，改它们无需 CSS 就能影响所有内置组件；
+# 卡片、徽章、间距这些更细的东西在 webui/theme.py 里用 CSS 补。
+# 保持浅色是刻意的：页面里嵌的训练曲线/轨迹图都是白底 PNG，深色外壳会让它们
+# 变成一块块刺眼的亮矩形。
 [theme]
 base = "light"
+primaryColor = "#4f46e5"
+backgroundColor = "#f7f8fa"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#0f172a"

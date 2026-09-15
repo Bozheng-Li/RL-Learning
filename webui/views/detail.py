@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from webui import data, jobs, live, paths
+from webui import data, jobs, live, paths, theme
 from webui.views import _shared
 
 
@@ -92,12 +92,7 @@ def _tab_signals(info: data.RunInfo) -> None:
     )
     if not picked:
         return
-    table = live.signal_frame(info.path, keys=picked)
-    if table is None:
-        st.info("这些列还没有数据。")
-        return
-    st.line_chart(table.rename(columns={k: live.SIGNAL_LABELS.get(k, k) for k in table.columns}),
-                  height=340)
+    _shared.signal_charts(info.path, picked, height=230)
 
     latest = live.compute_progress(info.path, info.total_timesteps)
     if latest and latest.latest:
@@ -155,19 +150,21 @@ def _tab_evaluations(info: data.RunInfo) -> None:
         height=320,
     )
     st.caption(f"共 {len(steps)} 次周期评估，每次 {results.shape[1]} 个回合。")
+    detail_table = pd.DataFrame(
+        {
+            "步数": steps,
+            "均值": means,
+            "标准差": stds,
+            "最小": results.min(axis=1),
+            "最大": results.max(axis=1),
+            "平均长度": lengths.mean(axis=1),
+        }
+    )
     st.dataframe(
-        pd.DataFrame(
-            {
-                "步数": steps,
-                "均值": means,
-                "标准差": stds,
-                "最小": results.min(axis=1),
-                "最大": results.max(axis=1),
-                "平均长度": lengths.mean(axis=1),
-            }
-        ),
+        detail_table,
         hide_index=True,
         width="stretch",
+        height=theme.fit_height(len(detail_table), max_height=420),
     )
 
 
@@ -262,7 +259,7 @@ def _tab_config(info: data.RunInfo) -> None:
 
 
 def render() -> None:
-    st.header("运行详情")
+    theme.page_header("运行详情", "曲线、诊断、轨迹回放与产物清单")
 
     runs = _shared.load_runs()
     info = _shared.run_selector(runs, key="detail_run")
@@ -270,23 +267,27 @@ def render() -> None:
         return
     st.session_state["selected_run"] = info.name
 
-    # 用紧凑的一行元信息而不是 st.metric：metric 默认字号极大，三个并排会把
-    # 标题压下去，视觉重心反了，也白占纵向空间。
-    status = data.STATUS_LABELS[info.status]
-    pieces = [
-        f"**{info.name}**",
-        f"状态 {status}",
-        f"算法 {info.algorithm or '-'}",
-        f"环境 {info.environment or '-'}",
-    ]
-    if info.config_name:
-        pieces.append(f"配置 `{info.config_name}`")
-    elif info.summary:
-        pieces.append("配置（自定义目录）")
-    if info.seed is not None:
-        pieces.append(f"种子 {info.seed}")
-    st.markdown("　·　".join(pieces))
-    st.divider()
+    # 一行徽章代替 st.metric：metric 默认字号极大，几个并排会把标题压下去，
+    # 视觉重心反了，还白占纵向空间。
+    theme.meta_row(
+        [
+            ("状态", data.STATUS_LABELS[info.status]),
+            ("算法", info.algorithm or "-"),
+            ("环境", info.environment or "-"),
+            ("配置", info.config_name or "自定义目录"),
+            ("种子", str(info.seed) if info.seed is not None else "-"),
+        ]
+    )
+    summary = info.summary
+    if summary:
+        theme.meta_row(
+            [
+                ("最终评估", f"{summary.get('mean_reward', 0):.2f} ± {summary.get('std_reward', 0):.2f}"),
+                ("评估回合", str(summary.get("episodes", "-"))),
+                ("训练步数", f"{summary.get('timesteps', info.total_timesteps or 0):,}"),
+            ]
+        )
+    st.write("")
 
     if info.status == "running":
         progress = live.compute_progress(info.path, info.total_timesteps)

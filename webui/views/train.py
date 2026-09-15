@@ -8,7 +8,7 @@ from typing import Any
 
 import streamlit as st
 
-from webui import data, jobs, paths
+from webui import data, jobs, paths, theme
 
 #: 摊平配置时跳过的子树。
 _SKIP_KEYS = {"profiles"}
@@ -52,7 +52,7 @@ def _conflicting_job(run_dir: Path) -> bool:
 
 
 def render() -> None:
-    st.header("发起训练")
+    theme.page_header("发起训练", "表单从 YAML 动态生成，启动后脱离本页面独立运行")
 
     names = data.list_config_names()
     if not names:
