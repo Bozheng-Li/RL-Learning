@@ -14,6 +14,9 @@ __pycache__/
 # README 需要的配图另行挑选，放在 docs/images/ 下（体积受控）。
 outputs/
 
+# WebUI 的运行时状态（任务注册表与子进程日志），与产物同理不入库。
+webui/.state/
+
 # 编辑器与系统文件
 .vscode/
 .idea/

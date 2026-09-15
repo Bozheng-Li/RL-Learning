@@ -1,0 +1,18 @@
+# WebUI 专属依赖。
+#
+# 刻意不并入根 requirements.txt：训练侧完全不需要 web 框架与 pandas，
+# 想跑实验的人不该被迫装上一整套前端依赖。
+#
+#   python -m pip install -r webui/requirements.txt
+#
+# 国内直连 PyPI 不稳时加镜像：
+#   python -m pip install -r webui/requirements.txt \
+#       -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# WebUI 进程要 import rl_common.config（torch）和 compare（numpy），
+# 所以根依赖必须先装上。
+-r ../requirements.txt
+
+# run_every 参数要求 1.37；st.dataframe 的 on_select 要求 1.35。
+streamlit>=1.37,<2.0
+pandas>=2.0,<3.0

@@ -126,6 +126,7 @@ docs/                配图与专题文档
 ├── images/            训练曲线、诊断图
 ├── images/demos/      策略回放 GIF（演示与训练进化）
 └── minigrid_door_key.md
+webui/               网页实验台（独立依赖，见 webui/README.md）
 outputs/             训练产物的集中存放处（不入库）
 ```
 
@@ -152,6 +153,28 @@ python play.py --config cartpole                       # 录策略轨迹
 python visualize.py --config cartpole                  # 重画图、重录轨迹
 python compare.py --pattern 'cartpole*'                # 跨运行对比
 ```
+
+### WebUI
+
+不想盯着终端时，可以用网页界面看实验进度和结果，也能直接发起训练：
+
+```bash
+python -m pip install -r webui/requirements.txt        # 独立依赖，跑实验不需要
+streamlit run webui/app.py
+```
+
+服务只监听 `127.0.0.1`，无桌面服务器上配合 SSH 端口转发访问：
+
+```bash
+ssh -N -L 8501:127.0.0.1:8501 <user>@<服务器>          # 然后开 http://127.0.0.1:8501
+```
+
+五个页面：**运行总览**（所有实验的状态与回报）、**运行详情**（曲线/信号/动作诊断/
+轨迹视频/产物）、**跨运行对比**、**发起训练**（表单 + 实时命令行预览）、
+**训练监控**（进度条 + 实时曲线 + 日志尾）。
+
+训练以子进程方式启动，**独立于页面运行**——关掉浏览器不会中断。详见
+[`webui/README.md`](webui/README.md)。
 
 ### 做对照实验
 

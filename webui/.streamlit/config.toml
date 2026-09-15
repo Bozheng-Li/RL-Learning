@@ -1,0 +1,22 @@
+# Streamlit 配置。
+#
+# 这台机器是无桌面的服务器，所以 headless 是必须的：否则 Streamlit 会尝试
+# 打开浏览器并在首次运行时等待邮箱输入。
+
+[server]
+# 只监听回环地址。远程访问走 SSH 端口转发：
+#     ssh -N -L 8501:127.0.0.1:8501 <user>@<host>
+# 这个服务没有任何鉴权，不要直接暴露到局域网。
+address = "127.0.0.1"
+port = 8501
+headless = true
+
+# 关掉文件监听。outputs/ 可能有 GB 级产物，默认的 inotify watch 会拖慢启动
+# 并触发意外重跑。开发时用命令行覆盖：--server.fileWatcherType auto
+fileWatcherType = "none"
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
