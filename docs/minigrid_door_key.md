@@ -3,12 +3,12 @@
 配置文件是 [`../config/minigrid.yaml`](../config/minigrid.yaml)。默认环境是 `MiniGrid-Empty-8x8-v0`，通过 `minigrid_flat` 包装器把图像和朝向编码为一维向量，便于使用 MLP。默认算法为 PPO，也可切换 A2C 或 DQN。
 
 ```bash
-python train.py
-python visualize.py
-python play.py
+python train.py     --config minigrid
+python visualize.py --config minigrid
+python play.py      --config minigrid
 ```
 
-默认结果目录为 `outputs/default/`。轨迹图使用图像统计摘要，视频保留网格世界画面。需要安装 `minigrid`。
+默认结果目录为 `outputs/minigrid/`。轨迹图使用图像统计摘要，视频保留网格世界画面。需要安装 `minigrid`。
 
 ## 进阶：DoorKey（稀疏奖励）
 
@@ -22,9 +22,9 @@ python play.py
 | [`../config/minigrid_doorkey_hard.yaml`](../config/minigrid_doorkey_hard.yaml) | `MiniGrid-DoorKey-6x6-v0` | ~20k 步达到 95-100% |
 
 ```bash
-python train.py --config ../config/minigrid_doorkey.yaml        # outputs/doorkey/
-python train.py --config ../config/minigrid_doorkey_hard.yaml   # outputs/doorkey_hard/
-python play.py  --config ../config/minigrid_doorkey_hard.yaml
+python train.py --config minigrid_doorkey        # -> outputs/minigrid_doorkey/
+python train.py --config minigrid_doorkey_hard   # -> outputs/minigrid_doorkey_hard/
+python play.py  --config minigrid_doorkey_hard
 ```
 
 ### 尺寸决定这个任务是否可解

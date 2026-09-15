@@ -387,7 +387,7 @@ Atari 训练动辄几小时。用 `monitor-experiment` 或 `training-check` 之�
 ### 5.1 DoorKey-5x5 —— 稀疏奖励（可解）
 
 ```bash
-python train.py --config minigrid --config config/minigrid_doorkey.yaml
+python train.py --config minigrid_doorkey
 ```
 
 **问题设定**：除了成功那一刻，**每步奖励都是 0**。要找到钥匙 → 捡起 → 开门 → 到达终点。
@@ -413,7 +413,7 @@ python train.py --config minigrid --config config/minigrid_doorkey.yaml
 ### 5.2 DoorKey-6x6 —— 探索（需要技巧）
 
 ```bash
-python train.py --config minigrid --config config/minigrid_doorkey_hard.yaml
+python train.py --config minigrid_doorkey_hard
 ```
 
 **这个配置不带 progress shaping 是解不开的。** 6×6 的钥匙经常落在 7×7 视野之外。
