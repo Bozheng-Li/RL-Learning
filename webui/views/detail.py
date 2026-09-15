@@ -270,11 +270,23 @@ def render() -> None:
         return
     st.session_state["selected_run"] = info.name
 
-    header = st.columns([2, 1, 1, 1])
-    header[0].markdown(f"### {info.name}")
-    header[1].metric("状态", data.STATUS_LABELS[info.status])
-    header[2].metric("算法", info.algorithm or "-")
-    header[3].metric("环境", info.environment or "-")
+    # 用紧凑的一行元信息而不是 st.metric：metric 默认字号极大，三个并排会把
+    # 标题压下去，视觉重心反了，也白占纵向空间。
+    status = data.STATUS_LABELS[info.status]
+    pieces = [
+        f"**{info.name}**",
+        f"状态 {status}",
+        f"算法 {info.algorithm or '-'}",
+        f"环境 {info.environment or '-'}",
+    ]
+    if info.config_name:
+        pieces.append(f"配置 `{info.config_name}`")
+    elif info.summary:
+        pieces.append("配置（自定义目录）")
+    if info.seed is not None:
+        pieces.append(f"种子 {info.seed}")
+    st.markdown("　·　".join(pieces))
+    st.divider()
 
     if info.status == "running":
         progress = live.compute_progress(info.path, info.total_timesteps)

@@ -59,7 +59,7 @@ def render() -> None:
         st.error(f"在 {paths.CONFIG_ROOT} 下没有找到任何配置。")
         return
 
-    left, right = st.columns([2, 1])
+    left, right = st.columns([3, 2], gap="large")
 
     with left:
         config_name = st.selectbox("配置", names, key="train_config")
@@ -172,9 +172,13 @@ def render() -> None:
 
     with right:
         st.subheader("将要执行的命令")
-        st.code(shlex.join(argv), language="bash")
         st.caption("可以直接复制到终端执行——UI 做的事情和它完全一样。")
-        st.metric("输出目录", directory)
+        st.code(shlex.join(argv), language="bash", wrap_lines=True)
+
+        st.caption("输出目录")
+        # 用 code 而不是 metric：metric 会把长路径渲染成巨大的字号并溢出。
+        st.code(directory, language=None)
+
         conflict = _conflicting_job(run_dir)
 
     if conflict:

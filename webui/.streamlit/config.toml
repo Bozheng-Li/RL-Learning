@@ -18,5 +18,9 @@ fileWatcherType = "none"
 [browser]
 gatherUsageStats = false
 
+# 隐藏右上角的 Deploy 按钮与开发者菜单：这是个本地工具，不会部署到 Community Cloud。
+[client]
+toolbarMode = "minimal"
+
 [theme]
 base = "light"
