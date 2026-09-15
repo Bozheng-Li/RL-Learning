@@ -43,6 +43,60 @@ MountainCar、Taxi、Atari Pong 则基本没动。**后者的原因不是"训得
 这些失败结果保留在仓库里是**有意的**——它们正是 `LEARNING_PATH.md` 里「诊断」
 环节的素材：能跑通环境的人很多，能说清「回报为什么卡住」的才算入门。
 
+## 策略演示
+
+每个环境用训练好的最终策略录一段确定性回放（`play.py`，`deterministic=true`）。
+标注的是**该回合的实际回报**：
+
+<table>
+<tr>
+<td align="center" width="33%"><b>CartPole-v1</b><br><sub>PPO · 满分 500</sub><br><img src="docs/images/demos/cartpole.gif" width="250"></td>
+<td align="center" width="33%"><b>MiniGrid-Empty-8x8</b><br><sub>PPO · 成功</sub><br><img src="docs/images/demos/minigrid.gif" width="250"></td>
+<td align="center" width="33%"><b>MiniGrid-DoorKey-6x6</b><br><sub>PPO · 成功（瘦身视界 + shaping）</sub><br><img src="docs/images/demos/minigrid_doorkey_hard.gif" width="250"></td>
+</tr>
+<tr>
+<td align="center"><b>LunarLander-v3</b><br><sub>PPO · +182 成功着陆</sub><br><img src="docs/images/demos/lunarlander.gif" width="250"></td>
+<td align="center"><b>Acrobot-v1</b><br><sub>DQN · -89 摆起</sub><br><img src="docs/images/demos/acrobot.gif" width="250"></td>
+<td align="center"><b>BipedalWalker-v3</b><br><sub>PPO · +111 蹒跚行走</sub><br><img src="docs/images/demos/bipedalwalker.gif" width="250"></td>
+</tr>
+<tr>
+<td align="center"><b>CarRacing-v3</b><br><sub>PPO · +117 像素输入驾驶</sub><br><img src="docs/images/demos/car_racing.gif" width="250"></td>
+<td align="center"><b>Pendulum-v1</b><br><sub>PPO · -1076 仍在学</sub><br><img src="docs/images/demos/pendulum.gif" width="250"></td>
+<td align="center"><b>MiniGrid-DoorKey-5x5</b><br><sub>RecurrentPPO · 成功</sub><br><img src="docs/images/demos/minigrid_doorkey.gif" width="250"></td>
+</tr>
+<tr>
+<td align="center"><b>Taxi-v4</b><br><sub>DQN · -200 <b>未学会</b>（从不接客）</sub><br><img src="docs/images/demos/taxi.gif" width="250"></td>
+<td align="center"><b>MountainCar-v0</b><br><sub>DQN · -200 <b>未学会</b></sub><br><img src="docs/images/demos/mountaincar.gif" width="250"></td>
+<td align="center"><b>Atari Pong</b><br><sub>PPO · -21 <b>全输</b>（退化为随机）</sub><br><img src="docs/images/demos/atari_pong.gif" width="250"></td>
+</tr>
+<tr>
+<td align="center"><b>Atari Breakout</b><br><sub>PPO · 0 <b>策略坍缩</b></sub><br><img src="docs/images/demos/atari_breakout.gif" width="250"></td>
+<td align="center" colspan="2"></td>
+</tr>
+</table>
+
+### 策略是怎么学会的
+
+比"最终表现"更有意思的是**中间过程**。下面这组是同一个 LunarLander 回合
+（**同一初始条件、同一随机种子**）分别用 25k / 75k / 125k / 175k / 200k 步的
+checkpoint 回放，只有策略不同：
+
+![LunarLander 策略进化](docs/images/demos/lunarlander_evolution.gif)
+
+- **25k**：直接坠毁（-199）
+- **75k**：学会悬停，但不敢降落，拖到 1000 步超时（-29）
+- **125k**：又会坠毁（-39）—— 中间过程并不是单调变好的
+- **175k / 200k**：稳定着陆（+224 / +197）
+
+"75k 会悬停、125k 反而坠毁"这一段尤其值得注意：**RL 的训练曲线不是单调上升的**，
+拿单个 checkpoint 的表现下结论很容易出错。这个 GIF 用
+`play.py --model <checkpoint>` 就能复现：
+
+```bash
+python play.py --config lunarlander \
+  --model outputs/lunarlander/checkpoints/lunarlander_175000_steps.pt
+```
+
 ## 目录结构
 
 ```
@@ -68,7 +122,10 @@ rl_common/           框架
 └── visualization.py   训练曲线与策略轨迹
 
 config/*.yaml        实验配置（唯一入口）
-docs/                配图（images/）与专题文档
+docs/                配图与专题文档
+├── images/            训练曲线、诊断图
+├── images/demos/      策略回放 GIF（演示与训练进化）
+└── minigrid_door_key.md
 outputs/             训练产物的集中存放处（不入库）
 ```
 
@@ -213,6 +270,16 @@ resolved_config.yaml          本次运行实际生效的配置
 
 这三例都不是「训练不充分」。注意 Taxi 的回报曲线看起来还很「稳定收敛」，
 **光看回报根本发现不了问题，必须看动作分布**。
+
+`logs/progress.csv` 里的训练信号是另一条线索。下面把两个**同为自研 PPO** 的运行
+并排对比——左边是学成的 CartPole，右边是死掉的 Pong：
+
+![训练信号对比](docs/images/training_signals.png)
+
+Pong 那一行在 40k 步之后发生了三件事：**熵锁定在 -1.79**（= ln 6，即 6 个动作上的
+最大熵，策略完全均匀随机）、**approx_kl 归零**、**clip fraction 归零**。KL 归零意味着
+策略已经不再更新了——不是"学得慢"，是训练**停摆**了。这类失效单看回报曲线同样
+看不出来。
 
 轨迹图包含观测特征、动作、单步/累计奖励和 phase plot：
 
