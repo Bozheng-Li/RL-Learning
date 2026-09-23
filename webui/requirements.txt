@@ -15,4 +15,11 @@
 
 # run_every 参数要求 1.37；st.dataframe 的 on_select 要求 1.35。
 streamlit>=1.37,<2.0
+
+# altair 由 charts.py 直接 import（分面学习曲线与全程面板都是它构造的），
+# 所以从「streamlit 的传递依赖」升格为直接依赖，免得哪天 streamlit 换掉它就悄悄断掉。
+# 区间跟随 streamlit 自己的声明：altair!=5.4.0,!=5.4.1,<7,>=5.0.0
+# （5.4.0 / 5.4.1 有已知的 vconcat 渲染缺陷）。
+altair>=5.0,<7.0,!=5.4.0,!=5.4.1
+
 pandas>=2.0,<3.0

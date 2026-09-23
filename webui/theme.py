@@ -58,6 +58,23 @@ def family_color(family: str) -> str:
     return FAMILY_COLORS.get(family, FAMILY_COLORS["OTHER"])
 
 
+def fade(color: str, alpha: float) -> str:
+    """把 ``#rrggbb`` 压成同色的 ``rgba(...)``。
+
+    用途是把「同一个算法的不同配置」画成同一色系的深浅两档：基准是饱和的族色，
+    变体是同色的半透明版。排行榜上同算法的一排条因此能一眼分成「哪个是基准」。
+    非 6 位十六进制（或带了 alpha）的输入原样返回，不猜。
+    """
+    text = str(color).strip()
+    if not text.startswith("#") or len(text) != 7:
+        return text
+    try:
+        red, green, blue = (int(text[index : index + 2], 16) for index in (1, 3, 5))
+    except ValueError:
+        return text
+    return f"rgba({red},{green},{blue},{max(0.0, min(1.0, alpha)):.2f})"
+
+
 def _css() -> str:
     return f"""
 <style>
@@ -100,7 +117,10 @@ code,pre,[data-testid="stCode"] code {{ font-family:{_FONT_MONO}; }}
 .rl-header-mark::before,.rl-header-mark::after {{ content:""; position:absolute; background:var(--rl-accent); border-radius:2px; }} .rl-header-mark::before {{ width:16px; height:3px; left:10px; top:12px; box-shadow:0 7px 0 var(--rl-accent),0 14px 0 #f4a261; }} .rl-header-mark::after {{ width:3px; height:22px; left:10px; top:9px; opacity:.18; }}
 
 /* ---- KPI ---- */
-.rl-stats {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.75rem; margin:0 0 1.4rem; }}
+/* 列数由 ``stat_row`` 按卡片数注入 ``--rl-stat-cols``，缺省 4 列——总览页与监控页
+   都是四张卡，观感与写死 ``repeat(4,...)`` 时逐字相同。单行超过 5 张卡的页面
+   （对比页），列数跟着卡数走，不再让第 5 张卡被挤到下一行的半格里。 */
+.rl-stats {{ display:grid; grid-template-columns:repeat(var(--rl-stat-cols,4),minmax(0,1fr)); gap:.75rem; margin:0 0 1.4rem; }}
 .rl-stat {{ background:var(--rl-surface); border:1px solid var(--rl-border); border-radius:var(--rl-radius); padding:.85rem 1rem .95rem; box-shadow:var(--rl-shadow); position:relative; overflow:hidden; }} .rl-stat::after {{ content:""; position:absolute; left:0; right:0; bottom:0; height:2px; background:var(--rl-accent); opacity:.85; }}
 .rl-stat-label {{ color:var(--rl-muted); font-size:.68rem; font-weight:760; letter-spacing:.1em; text-transform:uppercase; }} .rl-stat-value {{ color:var(--rl-ink); font-size:1.65rem; font-weight:760; line-height:1.15; margin:.3rem 0 .18rem; font-variant-numeric:tabular-nums; letter-spacing:-.02em; white-space:nowrap; }} .rl-stat-hint {{ color:var(--rl-muted); font-size:.72rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
 
@@ -149,7 +169,17 @@ code,pre,[data-testid="stCode"] code {{ font-family:{_FONT_MONO}; }}
 [data-testid="stVegaLiteChart"] {{ background:var(--rl-surface); border:1px solid var(--rl-border); border-radius:var(--rl-radius); padding:.5rem .25rem; box-shadow:var(--rl-shadow); }}
 .stButton>button,.stDownloadButton>button {{ border-radius:8px; border:1px solid var(--rl-border); font-weight:650; min-height:2.3rem; transition:all .14s ease; }} .stButton>button:hover,.stDownloadButton>button:hover {{ border-color:#f0aa92; color:var(--rl-accent); }} .stButton>button[kind="primary"] {{ background:var(--rl-accent); border-color:var(--rl-accent); color:#fff; box-shadow:0 3px 8px rgba(228,87,46,.18); }} .stButton>button[kind="primary"]:hover {{ background:var(--rl-accent-hover); border-color:var(--rl-accent-hover); color:#fff; }}
 [data-testid="stTextInput"] input,[data-testid="stNumberInput"] input,[data-testid="stSelectbox"]>div>div,[data-testid="stMultiSelect"]>div>div {{ border-radius:8px; border-color:var(--rl-border); }}
-[data-testid="stTabs"] [data-baseweb="tab-list"] {{ gap:.1rem; border-bottom:1px solid var(--rl-border); }} [data-testid="stTabs"] [data-baseweb="tab"] {{ border-radius:6px 6px 0 0; padding:.46rem .76rem; font-size:.82rem; font-weight:650; }} [data-testid="stTabs"] [aria-selected="true"] {{ color:var(--rl-accent); }} [data-testid="stTabs"] [data-baseweb="tab-highlight"] {{ background:var(--rl-accent); }}
+/* ---- 页签 ----
+   选择器必须用 ``[data-testid="stTab"]`` 与 ``[role="tablist"]``。实测（Streamlit
+   1.63）DOM 是 ``<div role="tablist" aria-orientation="horizontal">`` 包着若干
+   ``<div data-testid="stTab" role="tab" aria-selected="true">``，选中态由上层的
+   ``.react-aria-SelectionIndicator`` 画下划线。旧写法用的 ``data-baseweb="tab-list"``
+   / ``data-baseweb="tab"`` / ``data-baseweb="tab-highlight"`` **一个都不存在**，
+   整组样式一直是死的（``stTabList`` 也实测为 0 个）。 */
+[data-testid="stTabs"] [role="tablist"] {{ gap:.1rem; border-bottom:1px solid var(--rl-border); }}
+[data-testid="stTabs"] [data-testid="stTab"] {{ border-radius:6px 6px 0 0; padding:.46rem .76rem; font-size:.82rem; font-weight:650; }}
+[data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"] p {{ color:var(--rl-accent); }}
+[data-testid="stTabs"] .react-aria-SelectionIndicator {{ background:var(--rl-accent)!important; }}
 [data-testid="stAlert"] {{ border-radius:8px; border:1px solid var(--rl-border); }} [data-testid="stProgress"]>div>div>div>div {{ background:var(--rl-accent); }} hr {{ border-color:var(--rl-border); margin:1.2rem 0; }} footer,#MainMenu {{ visibility:hidden; }}
 @media(max-width:900px) {{ [data-testid="stMainBlockContainer"] {{ padding-left:1.1rem; padding-right:1.1rem; }} .rl-stats {{ grid-template-columns:repeat(2,minmax(0,1fr)); }} }} @media(max-width:560px) {{ .rl-stat-value {{ font-size:1.3rem; }} .rl-header-title {{ font-size:1.5rem; }} }}
 </style>
@@ -196,15 +226,24 @@ def page_header(title: str, subtitle: str = "", *, eyebrow: str = "Reinforce / w
 
 
 def stat_row(items: Iterable[tuple[str, object, str]]) -> None:
+    """一行 KPI 卡。列数**跟着卡片数走**——写死 4 列时，一张五卡的行会把第五张挤到
+    下一行的半格里，而一行的卡本来就应该等分整行。缺省仍是 4（总览页 / 监控页）。"""
     cards = []
+    count = 0
     for label, value, hint in items:
+        count += 1
         hint_html = f'<div class="rl-stat-hint">{html.escape(str(hint))}</div>' if hint else ""
         cards.append(
             '<div class="rl-stat"><div class="rl-stat-label">' + html.escape(str(label))
             + '</div><div class="rl-stat-value">' + html.escape(str(value)) + '</div>'
             + hint_html + '</div>'
         )
-    st.markdown(f'<div class="rl-stats">{"".join(cards)}</div>', unsafe_allow_html=True)
+    if not cards:
+        return
+    st.markdown(
+        f'<div class="rl-stats" style="--rl-stat-cols:{count}">{"".join(cards)}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def pill(text: str, tone: str = "neutral") -> str:
