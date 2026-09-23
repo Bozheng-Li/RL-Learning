@@ -64,15 +64,16 @@ streamlit run webui/app.py
 ssh -N -L 8501:127.0.0.1:8501 <user>@<服务器>     # 然后打开 http://127.0.0.1:8501
 ```
 
-五个页面覆盖完整工作流：
+六个页面覆盖完整工作流：
 
 | 页面 | 内容 |
 | --- | --- |
 | **运行总览** | 状态统计、环境/算法/名称筛选、结果表格导出 |
 | **运行详情** | 训练曲线 · 训练信号 · 动作诊断 · 周期评估 · 轨迹回放 · 产物 · 配置日志 |
-| **跨运行对比** | 多运行曲线叠加 + 最终评估并排 |
-| **发起训练** | 配置/算法/种子/步数/输出目录，命令行预览可复制 |
+| **跨运行对比** | 按算法族分组排名（族内归一化）+ 多运行曲线叠加 + 最终评估并排 |
+| **发起训练** | 配置/算法/种子/步数/输出目录，命令行预览可复制；切到变体模式可以一次铺开同算法的多份配置 |
 | **训练监控** | 进度条 · 剩余时间 · 实时信号曲线 · 日志尾，定时刷新可关 |
+| **变体分析** | 同算法换配置的敏感度与噪声底线 |
 
 <details>
 <summary><b>更多界面截图</b></summary>
@@ -224,6 +225,66 @@ python train.py --config minigrid_doorkey_hard --set training.total_timesteps=20
 ```
 
 `--set` 的键**必须是配置里已存在的**——拼错会立刻报错并列出该层可用的键，而不是静默用默认值跑完。`play.py` / `visualize.py` 要传同样的 `--set`，否则会去找原始配置里的目录。
+
+#### 变体实验：同一个算法的多份配置
+
+上面回答的是「哪个算法好」。要回答「**同一个算法对什么敏感**」，得让同一个算法跑多份配置——学习率换一档、网络加宽一层、给环境加上风。`variants.py` 做这件事，变体定义放在 `config/variants/<配置名>.yaml`：
+
+```yaml
+variants:
+  lr-1e-3:
+    algorithm.profiles.<ALGO>.kwargs.learning_rate: 0.001
+  net-64:
+    algorithm.profiles.<ALGO>.policy_kwargs.net_arch: [64, 64]
+  wind-strong:
+    environment.kwargs.enable_wind: true
+    environment.kwargs.wind_power: 15.0
+    environment.kwargs.turbulence_power: 1.5
+  budget-50k:
+    training.total_timesteps: 50000
+```
+
+路径里的 `<ALGO>` 在展开时替换成该算法的 **profile 键**（去掉 `SB3-` 前缀），所以同一条覆盖能同时用在自研 `PPO` 与 `SB3-PPO` 上——那正是「同超参、只换实现」的对照所要求的。值按 YAML 语法解析，`true` / `0.001` / `[64, 64]` 都能表达。
+
+```bash
+# 扫 PPO 的学习率，两个实现一起跑；基准会自动带上做对照
+python variants.py --config lunarlander --variants lr-1e-4 lr-1e-3 \
+                   --algorithms PPO SB3-PPO --seeds 42 43
+
+# 临时定义一个变体（名=点号路径=值），不写文件
+python variants.py --config lunarlander \
+    --variant 'lr-1e-4=algorithm.profiles.<ALGO>.kwargs.learning_rate=0.0001'
+
+# 看清单与绑卡，不启动
+python variants.py --config lunarlander --variants wind-strong --dry-run
+
+# 流水线：探测到的每张卡上放 4 个任务，哪个槽空出来立刻补下一个，直到全部跑完
+python variants.py --config lunarlander --variants lr-1e-3 net-64 --pipeline
+```
+
+用卡完全走探测与分配（`webui/gpus.py`）：**探测到几张卡就用几张**，一张卡上叠几个任务由 `--per-device` 给（默认 4），没有任何地方写死卡数。绑卡走 `CUDA_VISIBLE_DEVICES=GPU-<uuid>`，所以子进程里的设备恒为 `cuda:0`。
+
+变体身份写进 `experiment.name`（`<配置名>__<变体名>`）并落在目录名里，因此：
+
+- `resolved_config.yaml` 与 `evaluation.json` 里都带着变体名，事后从运行目录就能读回来；
+- WebUI 的排行榜、对比页、筛选器都把 `(算法, 变体)` 分成独立的行——同一算法的多条**是同一个算法不同配置**，读作「这个算法对那个超参有多敏感」，与跨算法的差距不是一回事；
+- 命令行发起的批次会写进 `webui/.state/jobs.json`，**自动出现在 WebUI 的「训练监控」页**里。
+
+变体不适用时会**跳过而不是带着错跑**：`REINFORCE` 没有 profile，只改超参的变体对它无效；`DQN`/`TD3` 没有 `ent_coef`。这些组合在启动前就被拦下并说明原因。而覆盖值恰好等于配置默认值的变体（例如 `lr-3e-4` 对 PPO）会与基准去重——否则它只会白烧一张卡，并在排行榜上和基准并排出现两行一模一样的数字。
+
+跑完之后，**WebUI 的「变体分析」页把整批结果折成结论**：每个变体在多少算法上一致变好/变差、跨算法的符号检验 p 值，以及逐算法的 `z`。这一页刻意先给出**噪声底线**再给效应表——这套实验里配置逐字段相同的两次运行（`SAC` 与 `SB3-SAC` 解析到同一个实现）的 3 种子平均 |Δ| 中位也有二三十、P90 近百，不先说这件事，每一行数字都会被读成效应。噪声的来源已经查清并且是这套数据里最值得记住的一条：
+
+> **同一型号的显卡上跑同一个配置，结果是逐位相同的；换一个型号就会分叉，并会被 RL 的混沌性放大。**
+
+实测：`DQN`/`SAC`/`TD3` 的孪生对里，**56 组同型号配对全部逐位相同**，106 组跨型号配对只有 17 组相同。所以变体与基准落在不同型号的卡上时，Δ 里混进的是**确定的硬件偏置**，不是随机噪声，事后无法从单个运行里剔除，只能靠调度时让对照与处理落在同型号的卡上来回避。分析页因此对每个配对都标注「跨型号」，并额外并排一列只用同型号配对的 `Δ均值（同型号）`。
+
+WebUI 的读法（页面上的说明与这里一致）见 `webui/README.md` 的「变体分析怎么读」。
+
+不想敲命令行也可以走 WebUI：「发起训练」页的**训练模式**切到「算法 × 变体 × 种子」，
+勾变体集文件里的条目、点快捷预设（学习超参 / 网络宽度 / 环境扰动 / 训练预算 /
+评估种子），或者在那张 `变体名 | 覆盖键 | 值` 长表里直接手填；启动前会逐条说清
+哪些组合会被跳过或去重。表格编辑只活在这一次会话里，要留档就点「下载这份变体集」
+放进 `config/variants/`。见 `webui/README.md` 的「变体模式」。
 
 ---
 

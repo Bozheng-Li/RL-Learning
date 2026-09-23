@@ -9,7 +9,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from webui import data, paths
+from webui import data, paths, theme
 
 
 def outputs_root() -> Path:
@@ -25,8 +25,25 @@ def selected_run_name() -> str | None:
 
 
 def load_runs(pattern: str | None = None) -> list[data.RunInfo]:
-    """扫描运行；对共享的 outputs 根做一次轻量缓存。"""
-    return data.list_runs(outputs_root(), pattern=pattern)
+    """扫描运行；对共享的 outputs 根做一次轻量缓存。
+
+    缓存的意义在 Streamlit 的交互模型上：点一下多选框、切一次下拉，整个脚本会重跑，
+    而一次全量扫描是 1.1 秒（639 个运行，要读 639 份 ``resolved_config.yaml`` 与
+    639 个 ``progress.csv`` 的尾部）。用户在筛选器上连点几下就白等好几秒。
+
+    ``ttl`` 给 8 秒：训练在跑时进度条仍然每几秒前进一次，而同一轮交互里的多次
+    调用共享同一次扫描。要立刻看到新结束的运行，用侧边栏的「清空缓存并刷新」。
+
+    ``st.cache_data`` 每次返回的是**反序列化的副本**，所以调用方可以放心改自己
+    拿到的 ``RunInfo``（例如把 ``latest_timestep`` 置空），不会污染别人的那一份。
+    """
+    return _scan_runs(str(outputs_root()), pattern)
+
+
+@st.cache_data(ttl=8.0, show_spinner=False)
+def _scan_runs(root: str, pattern: str | None) -> list[data.RunInfo]:
+    candidate = Path(root)
+    return data.list_runs(candidate, pattern=pattern)
 
 
 def signal_charts(
@@ -64,6 +81,70 @@ def signal_charts(
             with slot:
                 st.caption(live.SIGNAL_LABELS.get(key, key))
                 st.line_chart(frame[[key]], height=height)
+
+
+def gpu_panel(*, interval: float | None = None, key: str = "gpu-panel") -> None:
+    """显卡状态面板：每张卡一行显存条 + 利用率 + 占用进程。
+
+    ``interval`` 给定时用 ``st.fragment(run_every=...)`` 定时重跑——注意装饰器必须写在
+    函数体内现定义的函数上（模块顶层的 ``@st.fragment`` 会被冻结在首次导入的参数值，
+    见 ``views/monitor.py`` 开头的说明）。``interval=None`` 就只画一次。
+
+    进程是否「由本 WebUI 启动」靠与任务注册表里的 pid 比对得出，这是判断「这张卡上的
+    负载是不是我自己造的」的唯一可靠依据。
+    """
+    from webui import gpus  # noqa: PLC0415  —— 避免调用方为了画面板而顶层导入 torch
+    from webui import jobs as jobs_module  # noqa: PLC0415
+
+    def _paint() -> None:
+        inventory = gpus.detect_devices(force=True, with_processes=True)
+        if not inventory.devices:
+            theme.empty_state(
+                "没有可用的显卡",
+                inventory.note or "没有检测到 NVIDIA 显卡，任务会跑在 CPU 上。",
+            )
+            return
+        known_pids = {
+            job.pid for job in jobs_module.load_registry() if job.pid is not None
+        }
+        by_uuid: dict[str, list[gpus.GpuProcess]] = {}
+        for process in inventory.processes:
+            by_uuid.setdefault(process.gpu_uuid, []).append(process)
+
+        cards = []
+        for device in inventory.devices:
+            used = device.used_mb
+            busy = device.is_busy
+            lines = []
+            for process in by_uuid.get(device.uuid or "", []):
+                mine = " · 本 WebUI 启动" if process.pid in known_pids else ""
+                amount = f" · {process.used_memory_mb / 1024:.1f} GB" if process.used_memory_mb else ""
+                lines.append(f"PID {process.pid} · {process.name}{amount}{mine}")
+            cards.append(
+                theme.gpu_card(
+                    device.short_label,
+                    subtitle=f"{device.memory_free_mb / 1024:.1f} GB 空闲"
+                    if device.memory_free_mb is not None else "显存未知",
+                    used_mb=used,
+                    total_mb=device.memory_total_mb,
+                    utilization_pct=device.utilization_pct,
+                    processes=lines,
+                    tone="busy" if busy else "free",
+                    note="" if lines else "没有进程占用",
+                )
+            )
+        st.markdown(
+            '<div class="rl-stats" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr))">'
+            + "".join(cards) + "</div>",
+            unsafe_allow_html=True,
+        )
+        if inventory.source == "torch":
+            theme.caption("`nvidia-smi` 不可用，利用率与占用进程读不到（已回退到 torch）。")
+
+    if interval is None:
+        _paint()
+    else:
+        st.fragment(run_every=interval, key=key)(_paint)()
 
 
 def run_selector(

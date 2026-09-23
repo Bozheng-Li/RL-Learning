@@ -36,19 +36,24 @@ def discover_runs(root: Path, *, names: list[str], pattern: str | None, all_runs
     """找出要对比的运行目录。
 
     一个「运行」是指含有 ``evaluation.json`` 的目录——那是训练完整跑完的标志。
+
+    找不到东西时抛 ``FileNotFoundError`` 而不是 ``SystemExit``：后者继承自
+    ``BaseException``，``except Exception`` 抓不住，一旦这段逻辑被 WebUI 之类
+    的常驻进程复用就会把服务带崩。``main()`` 自己捕获后 ``sys.exit(1)``，
+    命令行的退出行为不变。
     """
     if names:
         candidates = [root / name for name in names]
         missing = [path for path in candidates if not (path / "evaluation.json").exists()]
         if missing:
             available = sorted(p.name for p in root.iterdir() if p.is_dir()) if root.exists() else []
-            raise SystemExit(
+            raise FileNotFoundError(
                 f"这些运行没有结果：{', '.join(str(p) for p in missing)}\n"
                 f"outputs/ 下现有：{', '.join(available) or '(空)'}"
             )
         return candidates
     if not root.exists():
-        raise SystemExit(f"输出目录不存在：{root}")
+        raise FileNotFoundError(f"输出目录不存在：{root}")
 
     found = sorted(
         path for path in root.iterdir() if path.is_dir() and (path / "evaluation.json").exists()
@@ -56,7 +61,9 @@ def discover_runs(root: Path, *, names: list[str], pattern: str | None, all_runs
     if pattern:
         found = [path for path in found if path.match(pattern)]
     if not found and not all_runs:
-        raise SystemExit(f"没有匹配的运行。outputs/ 下现有：{', '.join(p.name for p in root.iterdir())}")
+        raise FileNotFoundError(
+            f"没有匹配的运行。outputs/ 下现有：{', '.join(p.name for p in root.iterdir())}"
+        )
     return found
 
 
@@ -93,8 +100,20 @@ def load_curve(run_dir: Path) -> tuple[np.ndarray, np.ndarray] | None:
     return np.cumsum(lengths), rewards
 
 
+def variant_of(summary: dict) -> str:
+    """从 ``evaluation.json`` 的 ``experiment`` 字段里取出变体名；基准返回空串。
+
+    约定与 ``webui/variants.py::experiment_name`` 对称（``<配置名>__<变体名>``）。
+    命令行这边只做一次 ``rsplit``，不导入 ``webui`` 包——``compare.py`` 要在
+    最小依赖下能跑（它连绘图库都是延迟导入的）。
+    """
+    name = str(summary.get("experiment") or "")
+    head, separator, tail = name.rpartition("__")
+    return tail if separator and head and tail else ""
+
+
 def print_table(summaries: list[dict]) -> None:
-    header = f"{'运行':<26}{'算法':<13}{'环境':<24}{'均值':>9}{'标准差':>9}{'回合':>6}{'步数':>10}"
+    header = f"{'运行':<26}{'算法':<13}{'环境':<24}{'变体':<18}{'均值':>9}{'标准差':>9}{'回合':>6}{'步数':>10}"
     print(header)
     print("-" * len(header))
     for summary in sorted(summaries, key=lambda s: -s.get("mean_reward", float("-inf"))):
@@ -102,6 +121,7 @@ def print_table(summaries: list[dict]) -> None:
             f"{summary['_run']:<26}"
             f"{str(summary.get('algorithm', '-')):<13}"
             f"{str(summary.get('environment', '-')):<24}"
+            f"{(variant_of(summary) or '基准'):<18}"
             f"{summary.get('mean_reward', float('nan')):>9.2f}"
             f"{summary.get('std_reward', float('nan')):>9.2f}"
             f"{summary.get('episodes', 0):>6}"
@@ -171,9 +191,13 @@ def main() -> None:
     parser.add_argument("--figure", type=Path, help="对比图保存路径")
     args = parser.parse_args()
 
-    runs = discover_runs(
-        args.outputs, names=args.runs, pattern=args.pattern, all_runs=args.all
-    )
+    try:
+        runs = discover_runs(
+            args.outputs, names=args.runs, pattern=args.pattern, all_runs=args.all
+        )
+    except FileNotFoundError as error:
+        # CLI 入口负责把「找不到」变成退出码 1 与一句人话；库函数只管抛。
+        raise SystemExit(str(error)) from None
     if not runs:
         raise SystemExit("没有找到任何运行")
 

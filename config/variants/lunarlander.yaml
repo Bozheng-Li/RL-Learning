@@ -1,0 +1,80 @@
+# 变体集：LunarLander 的超参与环境扰动扫描。
+#
+# 每个变体是一组点号路径覆盖。路径里的 `<ALGO>` 在展开时替换成该算法的 profile 键
+# （去掉 `SB3-` 前缀），所以同一条覆盖能同时用在自研 `PPO` 与 `SB3-PPO` 上——
+# 那正是「同超参、只换实现」的对照所要求的。
+#
+# 值按 YAML 语法解析，所以 `true` 是布尔、`[64, 64]` 是列表。
+#
+# 用法：python variants.py --config lunarlander --variants lr-1e-3 wind-strong
+
+variants:
+  # ---- 维度 1：学习超参（基准 PPO lr=3e-4 / A2C lr=7e-4 / DQN lr=1e-4 / SAC 3e-4 / TD3 1e-3）
+  lr-1e-4:
+    algorithm.profiles.<ALGO>.kwargs.learning_rate: 0.0001
+  lr-3e-4:
+    algorithm.profiles.<ALGO>.kwargs.learning_rate: 0.0003
+  lr-1e-3:
+    algorithm.profiles.<ALGO>.kwargs.learning_rate: 0.001
+  # 熵正则：基准 PPO/A2C 是 0.01。DQN/TD3 没有这个键，会被 validate 拦下并跳过。
+  ent-0:
+    algorithm.profiles.<ALGO>.kwargs.ent_coef: 0.0
+  ent-0.05:
+    algorithm.profiles.<ALGO>.kwargs.ent_coef: 0.05
+  # 折扣因子
+  gamma-0.95:
+    algorithm.profiles.<ALGO>.kwargs.gamma: 0.95
+  gamma-0.999:
+    algorithm.profiles.<ALGO>.kwargs.gamma: 0.999
+  # 网络宽度：基准 PPO/A2C/DQN 是 [128,128]，SAC/TD3 是 [256,256]
+  net-64:
+    algorithm.profiles.<ALGO>.policy_kwargs.net_arch: [64, 64]
+  net-256:
+    algorithm.profiles.<ALGO>.policy_kwargs.net_arch: [256, 256]
+
+  # ---- 维度 2：环境扰动（基准：无风）
+  # 风力是 LunarLander 自带的随机推力，训练时也开着，所以它是「任务本身变难」而不是
+  # 「测试时分布漂移」。turbulence_power 一起改，否则只有平均推力没有抖动，难度加得不够。
+  wind-mild:
+    environment.kwargs.enable_wind: true
+    environment.kwargs.wind_power: 7.5
+    environment.kwargs.turbulence_power: 0.75
+  wind-strong:
+    environment.kwargs.enable_wind: true
+    environment.kwargs.wind_power: 15.0
+    environment.kwargs.turbulence_power: 1.5
+  wind-extreme:
+    environment.kwargs.enable_wind: true
+    environment.kwargs.wind_power: 30.0
+    environment.kwargs.turbulence_power: 3.0
+
+  wind-turbulent:
+    environment.kwargs.enable_wind: true
+    environment.kwargs.wind_power: 8.0
+    environment.kwargs.turbulence_power: 2.0
+
+  # ---- 维度 3：重力与初始条件（基准：-10.0）
+  #
+  # **上限是 Gymnasium 硬性规定的**：``LunarLander.__init__`` 里有一句
+  # ``assert -12.0 < gravity < 0.0``，越界直接 AssertionError 打挂训练。
+  # 第一版这里写的是 -14.0，5 个进程在 0.1 分钟内全挂了才发现——所以下面这两个值都贴着
+  # 合法区间取：-11.5 顶到上限边缘，-3.0 是月球量级。与基准 -10.0 一起构成三个点。
+  gravity-moon:
+    environment.kwargs.gravity: -3.0
+  gravity-heavy:
+    environment.kwargs.gravity: -11.5
+
+  # ---- 维度 4：训练预算与评估种子
+  # 预算变体不可与 20 万步的直接比回报绝对值，只回答「多少步够用」，
+  # 分析时靠 variant 字段天然分组。
+  budget-25k:
+    training.total_timesteps: 25000
+  budget-50k:
+    training.total_timesteps: 50000
+  budget-100k:
+    training.total_timesteps: 100000
+  # 换一组评估种子，用来判断「同一个模型换一批初始条件还稳不稳」。
+  evalseed-0:
+    evaluation.seed_offset: 0
+  evalseed-5000:
+    evaluation.seed_offset: 5000

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import streamlit as st
+import yaml
 
-from webui import data, jobs, live, paths, theme
+from webui import data, jobs, live, paths, theme, variants
 from webui.views import _shared
 
 
@@ -244,6 +246,50 @@ def _tab_artifacts(info: data.RunInfo) -> None:
             )
 
 
+def _render_variant_diff(info: data.RunInfo) -> None:
+    """「相对原配置改了什么」——变体运行最该先看的一段。
+
+    变体批次跑起来后，光看回报排序看不出 ``lr-1e-3`` 与 ``lr-1e-4`` 差在哪。这里拿
+    ``resolved_config.yaml``（训练启动那一刻写下的真相）跟当前的原配置逐叶子比，
+    把变化的点号路径列出来。
+    """
+    if not info.variant or not info.config_name:
+        return
+    resolved = data.read_yaml(info.path / paths.START_MARKER)
+    if not resolved:
+        return
+    try:
+        base = data.load_config_dict(info.config_name)
+    except (OSError, ValueError):
+        return
+
+    from webui import variants  # noqa: PLC0415  —— 只有这一小段需要
+
+    changed = variants.diff_against_base(resolved, base)
+    if not changed:
+        theme.caption("这个变体的配置与原配置逐字段相同（可能只改了由批次参数承载的步数）。")
+        return
+    theme.section_head("相对原配置改了什么", f"对比 config/{info.config_name}.yaml")
+    st.dataframe(
+        pd.DataFrame([
+            {"键": key, "原值": _show(old), "生效值": _show(new)}
+            for key, old, new in changed
+        ]),
+        hide_index=True,
+        width="stretch",
+        height=theme.fit_height(len(changed)),
+    )
+
+
+def _show(value: Any) -> str:
+    """diff 表里的值：缺席用一句话表示，其余用 YAML 标量写法（列表也读得懂）。"""
+    if value is variants.MISSING:
+        return "（配置里没有这个键）"
+    if isinstance(value, (list, dict)):
+        return yaml.safe_dump(value, default_flow_style=True, allow_unicode=True).strip()
+    return str(value)
+
+
 def _tab_config(info: data.RunInfo) -> None:
     resolved = data.read_yaml(info.path / paths.START_MARKER)
     if resolved:
@@ -259,7 +305,11 @@ def _tab_config(info: data.RunInfo) -> None:
 
 
 def render() -> None:
-    theme.page_header("运行详情", "曲线、诊断、轨迹回放与产物清单")
+    theme.page_header(
+        "运行详情",
+        "一次运行的完整复盘：训练信号、动作诊断、周期评估、轨迹与实际生效的配置。",
+        eyebrow="Reinforce / run detail",
+    )
 
     runs = _shared.load_runs()
     info = _shared.run_selector(runs, key="detail_run")
@@ -274,7 +324,9 @@ def render() -> None:
             ("状态", data.STATUS_LABELS[info.status]),
             ("算法", info.algorithm or "-"),
             ("环境", info.environment or "-"),
+            ("设备", info.device or "cpu"),
             ("配置", info.config_name or "自定义目录"),
+            ("变体", info.variant or "基准"),
             ("种子", str(info.seed) if info.seed is not None else "-"),
         ]
     )
@@ -312,4 +364,5 @@ def render() -> None:
     with tabs[6]:
         _render_regenerate(info.path, info.config_name)
         st.divider()
+        _render_variant_diff(info)
         _tab_config(info)

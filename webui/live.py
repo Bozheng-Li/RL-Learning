@@ -68,6 +68,9 @@ SIGNAL_LABELS: dict[str, str] = {
 #: 判断训练是否「卡死」的静默阈值（秒）。
 STALE_SECONDS = 300.0
 
+#: ``progress.csv`` 里记总步数的列名（``latest_step`` 用，避免与 ``PROGRESS_COLUMNS`` 脱节）。
+_PROGRESS_STEPS_COLUMN = PROGRESS_COLUMNS["steps"]
+
 # 上一次成功解析的快照：路径 -> (文件大小, DataFrame)。
 # SB3 重写 progress.csv 时会先 seek(0) 截断，这期间读到的可能是半截文件，
 # 用上一次的结果兜底。多会话共享没有副作用——这只是按路径索引的只读快照。
@@ -113,6 +116,56 @@ def read_progress_csv(path: Path) -> pd.DataFrame | None:
     with _LAST_GOOD_LOCK:
         _LAST_GOOD[key] = (size, frame)
     return frame
+
+
+def latest_step(path: Path, *, tail_bytes: int = 262_144) -> int | None:
+    """从 ``progress.csv`` 尾部取出**最后一个**已写入的步数，不解析整个文件。
+
+    列表页只关心「现在跑到第几步」，却要对几百个运行各读一次 ``progress.csv``——
+    DQN 那种 300k 步、四万行的文件有 5.6 MB，全量解析一次 57ms，639 个运行就是
+    7 秒多，而真正需要的只有最后一行的那一列。这里只从尾部读 256 KB（实测覆盖
+    全部 639 个运行，没有一次落空），按列名取偏移，倒着找第一个非空值。
+
+    与 ``read_progress_csv`` 有三点不同，都是刻意的：
+
+    - **不缓存**：训练正在追加时每次都要看到新值，缓存反而会显示过期步数。
+    - **不用 pandas**：省掉 40 倍的开销，也因此不受「半截文件」的影响——倒着读
+      本来就是读到第一个完整值就停。
+    - **只认最后一列**：列名变更（SB3 重写表头）时回退到 ``None``，让调用方退回
+      ``total_timesteps``，而不是猜一个错的。
+    """
+    column = _PROGRESS_STEPS_COLUMN.encode()
+    try:
+        with path.open("rb") as handle:
+            header = handle.readline()
+            try:
+                index = header.rstrip(b"\r\n").split(b",").index(column)
+            except ValueError:
+                return None
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            handle.seek(max(0, size - tail_bytes))
+            blob = handle.read()
+    except OSError:
+        return None
+
+    # 先试按行切（正常情况）。整块只有一行时说明这一块落在某个超长行内部，
+    # 此时它没有完整行，直接放弃——返回 None 比返回一个半截数字安全。
+    lines = blob.split(b"\n")
+    if len(lines) == 1:
+        return None
+    for raw in reversed(lines):
+        fields = raw.split(b",")
+        if index >= len(fields):
+            continue
+        value = fields[index].strip()
+        if not value:
+            continue
+        try:
+            return int(float(value))
+        except ValueError:
+            continue
+    return None
 
 
 def column(frame: pd.DataFrame | None, key: str) -> pd.Series | None:

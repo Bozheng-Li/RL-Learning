@@ -26,9 +26,10 @@ toolbarMode = "minimal"
 # 卡片、徽章、间距这些更细的东西在 webui/theme.py 里用 CSS 补。
 # 保持浅色是刻意的：页面里嵌的训练曲线/轨迹图都是白底 PNG，深色外壳会让它们
 # 变成一块块刺眼的亮矩形。
+# 五个色值与 webui/theme.py 顶部的常量对齐，改一处请同时改另一处。
 [theme]
 base = "light"
-primaryColor = "#4f46e5"
-backgroundColor = "#f7f8fa"
+primaryColor = "#e4572e"
+backgroundColor = "#f4f6f3"
 secondaryBackgroundColor = "#ffffff"
-textColor = "#0f172a"
+textColor = "#182126"
