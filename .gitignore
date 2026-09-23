@@ -17,6 +17,11 @@ outputs/
 # WebUI 的运行时状态（任务注册表与子进程日志），与产物同理不入库。
 webui/.state/
 
+# 根目录的批次日志（命令行重定向的产物，如 logs/variant-batch.log）。
+# 代码本身从不往这里写——运行时的日志一律在各自的 outputs/<运行>/logs/ 下，
+# 那些随 outputs/ 一起被忽略。这一条只为挡住手敲 `> logs/xxx.log` 留下的文件。
+logs/
+
 # 编辑器与系统文件
 .vscode/
 .idea/
