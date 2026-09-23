@@ -51,7 +51,13 @@
 </td>
 <td width="50%" align="center">
 <img src="docs/images/webui/train.png" alt="发起训练"><br>
-<sub><b>发起训练</b> —— 表单实时生成将要执行的命令行</sub>
+<sub><b>发起训练</b>（变体模式）—— 一张 <code>变体名 | 覆盖键 | 值</code> 长表铺开同算法的多份配置</sub>
+</td>
+</tr>
+<tr>
+<td colspan="2" align="center">
+<img src="docs/images/webui/analysis.png" width="880" alt="变体分析"><br>
+<sub><b>变体分析</b> —— 先给噪声底线，再给各变体的敏感度与符号检验</sub>
 </td>
 </tr>
 </table>
